@@ -231,6 +231,39 @@ slackSender    | string    | null                                | The name used
 
 Symfony bundle for Jobby - [imper86/jobby-cron-bundle](https://github.com/imper86/jobby-cron-bundle)
 
+## Changelog ##
+
+### v3.0.0 (PHP 8+ Upgrade) ###
+
+**Breaking Changes:**
+- Minimum PHP version is now 8.0
+- Replaced SwiftMailer with Symfony Mailer
+- PHPUnit upgraded to ^9.0|^10.0|^11.0
+
+**New Features & Improvements:**
+- Full PHP 8.0+ compatibility with typed properties and return types
+- Uses Symfony Mailer DSN format for mail configuration
+- Modern PHP syntax: union types, match expressions, named arguments support
+- Strict type comparisons throughout the codebase
+
+**Migration Guide:**
+
+If you were injecting a custom mailer, update your code:
+
+```php
+// Before (SwiftMailer)
+$mailer = new \Swift_Mailer($transport);
+$helper = new \Jobby\Helper($mailer);
+
+// After (Symfony Mailer)
+use Symfony\Component\Mailer\Mailer;
+use Symfony\Component\Mailer\Transport;
+
+$transport = Transport::fromDsn('smtp://localhost:25');
+$mailer = new Mailer($transport);
+$helper = new \Jobby\Helper($mailer);
+```
+
 ## Credits ##
 
 Developed before, but since inspired by [whenever](<https://github.com/javan/whenever>).
