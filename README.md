@@ -19,6 +19,12 @@ Jobby can handle logging, locking, error emails and more.
 - Theoretical Windows support (but not ever tested)
 - Send alerts to Slack or Mattermost whenever a job exits with an error status.
 
+## Requirements ##
+
+- PHP 8.0 or higher
+- [Composer](http://getcomposer.org)
+- `posix` extension (for Unix/Linux systems)
+
 ## Getting Started ##
 
 ### Installation ###

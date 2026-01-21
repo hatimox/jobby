@@ -1,55 +1,48 @@
 <?php
+
 namespace Jobby;
 
 use GuzzleHttp\Client as Guzzle;
+use Symfony\Component\Mailer\Mailer;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Mailer\Transport;
+use Symfony\Component\Mime\Address;
+use Symfony\Component\Mime\Email;
 
 class Helper
 {
     /**
      * @var int
      */
-    const UNIX = 0;
+    public const UNIX = 0;
 
     /**
      * @var int
      */
-    const WINDOWS = 1;
+    public const WINDOWS = 1;
 
     /**
      * @var resource[]
      */
-    private $lockHandles = [];
+    private array $lockHandles = [];
 
     /**
-     * @var \Swift_Mailer
+     * @var MailerInterface|null
      */
-    private $mailer;
+    private ?MailerInterface $mailer;
 
     /**
      * The Guzzle HTTP client instance
-     *
-     * @var \GuzzleHttp\Client
      */
-    protected $guzzle;
+    protected Guzzle $guzzle;
 
-
-    /**
-     * @param \Swift_Mailer $mailer
-     */
-    public function __construct(\Swift_Mailer $mailer = null)
+    public function __construct(?MailerInterface $mailer = null)
     {
         $this->mailer = $mailer;
-        $this->guzzle = new Guzzle;
+        $this->guzzle = new Guzzle();
     }
 
-    /**
-     * @param string $job
-     * @param array  $config
-     * @param string $message
-     *
-     * @return \Swift_Message
-     */
-    public function sendMail($job, array $config, $message)
+    public function sendMail(string $job, array $config, string $message): Email
     {
         $host = $this->getHost();
         $body = <<<EOF
@@ -60,61 +53,61 @@ class Helper
         Best,
         jobby@$host
         EOF;
-        
-        $mail = new \Swift_Message();
-        $mail->setTo(explode(',', $config['recipients']));
-        if(empty($config['mailSubject'])){
-            $mail->setSubject("[$host] '{$job}' needs some attention!");
-        }else{
-            $mail->setSubject($config['mailSubject']);
-        }
-        $mail->setBody($body);
-        $mail->setFrom([$config['smtpSender'] => $config['smtpSenderName']]);
-        $mail->setSender($config['smtpSender']);
+
+        $email = (new Email())
+            ->from(new Address($config['smtpSender'], $config['smtpSenderName']))
+            ->to(...array_map('trim', explode(',', $config['recipients'])))
+            ->subject(empty($config['mailSubject'])
+                ? "[$host] '{$job}' needs some attention!"
+                : $config['mailSubject'])
+            ->text($body);
 
         $mailer = $this->getCurrentMailer($config);
-        $mailer->send($mail);
+        $mailer->send($email);
 
-        return $mail;
+        return $email;
     }
 
-    /**
-     * @param array $config
-     *
-     * @return \Swift_Mailer
-     */
-    private function getCurrentMailer(array $config)
+    private function getCurrentMailer(array $config): MailerInterface
     {
         if ($this->mailer !== null) {
             return $this->mailer;
         }
 
-        $swiftVersion = (int) explode('.', \Swift::VERSION)[0];
+        $dsn = $this->buildMailerDsn($config);
+        $transport = Transport::fromDsn($dsn);
 
+        return new Mailer($transport);
+    }
+
+    private function buildMailerDsn(array $config): string
+    {
         if ($config['mailer'] === 'smtp') {
-            $transport = new \Swift_SmtpTransport(
-                $config['smtpHost'],
-                $config['smtpPort'],
-                $config['smtpSecurity']
-            );
-            $transport->setUsername($config['smtpUsername']);
-            $transport->setPassword($config['smtpPassword']);
-        } elseif ($swiftVersion < 6 && $config['mailer'] === 'mail') {
-            $transport = \Swift_MailTransport::newInstance();
-        } else {
-            $transport = new \Swift_SendmailTransport();
+            $scheme = match ($config['smtpSecurity']) {
+                'ssl' => 'smtps',
+                'tls' => 'smtp',
+                default => 'smtp',
+            };
+
+            $user = $config['smtpUsername'] ? urlencode($config['smtpUsername']) : '';
+            $pass = $config['smtpPassword'] ? urlencode($config['smtpPassword']) : '';
+            $auth = ($user && $pass) ? "{$user}:{$pass}@" : ($user ? "{$user}@" : '');
+
+            $host = $config['smtpHost'] ?? 'localhost';
+            $port = $config['smtpPort'] ?? 25;
+
+            return "{$scheme}://{$auth}{$host}:{$port}";
         }
 
-        return new \Swift_Mailer($transport);
+        // Default to sendmail
+        return 'sendmail://default';
     }
 
     /**
-     * @param string $lockFile
-     *
      * @throws Exception
      * @throws InfoException
      */
-    public function acquireLock($lockFile)
+    public function acquireLock(string $lockFile): void
     {
         if (array_key_exists($lockFile, $this->lockHandles)) {
             throw new Exception("Lock already acquired (Lockfile: $lockFile).");
@@ -146,11 +139,9 @@ class Helper
     }
 
     /**
-     * @param string $lockFile
-     *
      * @throws Exception
      */
-    public function releaseLock($lockFile)
+    public function releaseLock(string $lockFile): void
     {
         if (!array_key_exists($lockFile, $this->lockHandles)) {
             throw new Exception("Lock NOT held - bug? Lockfile: $lockFile");
@@ -164,12 +155,7 @@ class Helper
         unset($this->lockHandles[$lockFile]);
     }
 
-    /**
-     * @param string $lockFile
-     *
-     * @return int
-     */
-    public function getLockLifetime($lockFile)
+    public function getLockLifetime(string $lockFile): int
     {
         if (!file_exists($lockFile)) {
             return 0;
@@ -186,13 +172,10 @@ class Helper
 
         $stat = stat($lockFile);
 
-        return (time() - $stat['mtime']);
+        return time() - $stat['mtime'];
     }
 
-    /**
-     * @return string
-     */
-    public function getTempDir()
+    public function getTempDir(): string
     {
         // @codeCoverageIgnoreStart
         if (function_exists('sys_get_temp_dir')) {
@@ -211,26 +194,17 @@ class Helper
         return $tmp;
     }
 
-    /**
-     * @return string
-     */
-    public function getHost()
+    public function getHost(): string
     {
         return php_uname('n');
     }
 
-    /**
-     * @return string|null
-     */
-    public function getApplicationEnv()
+    public function getApplicationEnv(): ?string
     {
-        return isset($_SERVER['APPLICATION_ENV']) ? $_SERVER['APPLICATION_ENV'] : null;
+        return $_SERVER['APPLICATION_ENV'] ?? null;
     }
 
-    /**
-     * @return int
-     */
-    public function getPlatform()
+    public function getPlatform(): int
     {
         if (strncasecmp(PHP_OS, 'Win', 3) === 0) {
             // @codeCoverageIgnoreStart
@@ -241,12 +215,7 @@ class Helper
         return self::UNIX;
     }
 
-    /**
-     * @param string $input
-     *
-     * @return string
-     */
-    public function escape($input)
+    public function escape(string $input): string
     {
         $input = strtolower($input);
         $input = preg_replace('/[^a-z0-9_. -]+/', '', $input);
@@ -257,7 +226,7 @@ class Helper
         return $input;
     }
 
-    public function getSystemNullDevice()
+    public function getSystemNullDevice(): string
     {
         $platform = $this->getPlatform();
         if ($platform === self::UNIX) {
@@ -266,14 +235,7 @@ class Helper
         return 'NUL';
     }
 
-    /**
-     * @param string $job
-     * @param array  $config
-     * @param string $message
-     *
-     * @return void
-     */
-    public function sendSlackAlert($job, array $config, $message)
+    public function sendSlackAlert(string $job, array $config, string $message): void
     {
         $host = $this->getHost();
         $body = <<<EOF
@@ -284,23 +246,15 @@ class Helper
         Best,
         jobby@$host
         EOF;
-                $client = new \Maknz\Slack\Client($config['slackUrl']);
+        $client = new \Maknz\Slack\Client($config['slackUrl']);
         $client->to($config['slackChannel']);
-        if($config['slackSender']){
+        if ($config['slackSender']) {
             $client->from($config['slackSender']);
         }
         $client->send($body);
-
     }
 
-    /**
-     * @param string $job
-     * @param array  $config
-     * @param string $message
-     *
-     * @return void
-     */
-    public function sendMattermostAlert($job, array $config, $message)
+    public function sendMattermostAlert(string $job, array $config, string $message): void
     {
         $host = $this->getHost();
         $body = <<<EOF
@@ -311,9 +265,8 @@ class Helper
         Best,
         jobby@$host
         EOF;
-        $payload = ['text'=>$body];
+        $payload = ['text' => $body];
         $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE);
         $this->guzzle->post($config['mattermostUrl'], ['body' => $encoded]);
-
     }
 }

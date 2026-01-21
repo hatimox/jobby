@@ -2,14 +2,16 @@
 
 namespace Jobby\Tests;
 
+use Jobby\Exception;
 use Jobby\Helper;
 use Jobby\Jobby;
 use Opis\Closure\SerializableClosure;
+use PHPUnit\Framework\TestCase;
 
 /**
  * @coversDefaultClass Jobby\Jobby
  */
-class JobbyTest extends \PHPUnit_Framework_TestCase
+class JobbyTest extends TestCase
 {
     /**
      * @var string
@@ -24,20 +26,20 @@ class JobbyTest extends \PHPUnit_Framework_TestCase
     /**
      * {@inheritdoc}
      */
-    protected function setUp()
+    protected function setUp(): void
     {
         $this->logFile = __DIR__ . '/_files/JobbyTest.log';
         if (file_exists($this->logFile)) {
             unlink($this->logFile);
         }
-        
+
         $this->helper = new Helper();
     }
 
     /**
      * {@inheritdoc}
      */
-    protected function tearDown()
+    protected function tearDown(): void
     {
         if (file_exists($this->logFile)) {
             unlink($this->logFile);
@@ -48,7 +50,7 @@ class JobbyTest extends \PHPUnit_Framework_TestCase
      * @covers ::add
      * @covers ::run
      */
-    public function testShell()
+    public function testShell(): void
     {
         $jobby = new Jobby();
         $jobby->add(
@@ -70,7 +72,7 @@ class JobbyTest extends \PHPUnit_Framework_TestCase
     /**
      * @return void
      */
-    public function testBackgroundProcessIsNotSpawnedIfJobIsNotDueToBeRun()
+    public function testBackgroundProcessIsNotSpawnedIfJobIsNotDueToBeRun(): void
     {
         $hour = date("H", strtotime("+1 hour"));
         $jobby = new Jobby();
@@ -97,7 +99,7 @@ class JobbyTest extends \PHPUnit_Framework_TestCase
      * @covers ::add
      * @covers ::run
      */
-    public function testOpisClosure()
+    public function testOpisClosure(): void
     {
         $fn = static function () {
             echo 'Another function!';
@@ -131,7 +133,7 @@ class JobbyTest extends \PHPUnit_Framework_TestCase
      * @covers ::add
      * @covers ::run
      */
-    public function testClosure()
+    public function testClosure(): void
     {
         $jobby = new Jobby();
         $jobby->add(
@@ -158,7 +160,7 @@ class JobbyTest extends \PHPUnit_Framework_TestCase
      * @covers ::add
      * @covers ::run
      */
-    public function testShouldRunAllJobsAdded()
+    public function testShouldRunAllJobsAdded(): void
     {
         $jobby = new Jobby(['output' => $this->logFile]);
         $jobby->add(
@@ -188,15 +190,15 @@ class JobbyTest extends \PHPUnit_Framework_TestCase
         // Job runs asynchronously, so wait a bit
         sleep($this->getSleepTime());
 
-        $this->assertContains('job-1', $this->getLogContent());
-        $this->assertContains('job-2', $this->getLogContent());
+        $this->assertStringContainsString('job-1', $this->getLogContent());
+        $this->assertStringContainsString('job-2', $this->getLogContent());
     }
 
     /**
      * This is the same test as testClosure but (!) we use the default
      * options to set the output file.
      */
-    public function testDefaultOptionsShouldBeMerged()
+    public function testDefaultOptionsShouldBeMerged(): void
     {
         $jobby = new Jobby(['output' => $this->logFile]);
         $jobby->add(
@@ -221,7 +223,7 @@ class JobbyTest extends \PHPUnit_Framework_TestCase
     /**
      * @covers ::getDefaultConfig
      */
-    public function testDefaultConfig()
+    public function testDefaultConfig(): void
     {
         $jobby = new Jobby();
         $config = $jobby->getDefaultConfig();
@@ -239,7 +241,7 @@ class JobbyTest extends \PHPUnit_Framework_TestCase
      * @covers ::setConfig
      * @covers ::getConfig
      */
-    public function testSetConfig()
+    public function testSetConfig(): void
     {
         $jobby = new Jobby();
         $oldCfg = $jobby->getConfig();
@@ -254,11 +256,11 @@ class JobbyTest extends \PHPUnit_Framework_TestCase
     /**
      * @covers ::getJobs
      */
-    public function testGetJobs()
+    public function testGetJobs(): void
     {
         $jobby = new Jobby();
         $this->assertCount(0,$jobby->getJobs());
-        
+
         $jobby->add(
             'test job1',
             [
@@ -280,10 +282,11 @@ class JobbyTest extends \PHPUnit_Framework_TestCase
 
     /**
      * @covers ::add
-     * @expectedException \Jobby\Exception
      */
-    public function testExceptionOnMissingJobOptionCommand()
+    public function testExceptionOnMissingJobOptionCommand(): void
     {
+        $this->expectException(Exception::class);
+
         $jobby = new Jobby();
 
         $jobby->add(
@@ -296,10 +299,11 @@ class JobbyTest extends \PHPUnit_Framework_TestCase
 
     /**
      * @covers ::add
-     * @expectedException \Jobby\Exception
      */
-    public function testExceptionOnMissingJobOptionSchedule()
+    public function testExceptionOnMissingJobOptionSchedule(): void
     {
+        $this->expectException(Exception::class);
+
         $jobby = new Jobby();
 
         $jobby->add(
@@ -316,7 +320,7 @@ class JobbyTest extends \PHPUnit_Framework_TestCase
      * @covers ::runWindows
      * @covers ::runUnix
      */
-    public function testShouldRunJobsAsync()
+    public function testShouldRunJobsAsync(): void
     {
         $jobby = new Jobby();
         $jobby->add(
@@ -336,7 +340,7 @@ class JobbyTest extends \PHPUnit_Framework_TestCase
         $this->assertLessThan(0.5, $duration);
     }
 
-    public function testShouldFailIfMaxRuntimeExceeded()
+    public function testShouldFailIfMaxRuntimeExceeded(): void
     {
         if ($this->helper->getPlatform() === Helper::WINDOWS) {
             $this->markTestSkipped("'maxRuntime' is not supported on Windows");
@@ -358,18 +362,18 @@ class JobbyTest extends \PHPUnit_Framework_TestCase
         $jobby->run();
         sleep(2);
 
-        $this->assertContains('ERROR: MaxRuntime of 1 secs exceeded!', $this->getLogContent());
+        $this->assertStringContainsString('ERROR: MaxRuntime of 1 secs exceeded!', $this->getLogContent());
     }
 
     /**
      * @return string
      */
-    private function getLogContent()
+    private function getLogContent(): string
     {
         return file_get_contents($this->logFile);
     }
 
-    private function getSleepTime()
+    private function getSleepTime(): int
     {
         return $this->helper->getPlatform() === Helper::UNIX ? 1 : 2;
     }

@@ -12,26 +12,23 @@ class Jobby
     /**
      * @var array
      */
-    protected $config = [];
+    protected array $config = [];
 
     /**
      * @var string
      */
-    protected $script;
+    protected string $script;
 
     /**
      * @var array
      */
-    protected $jobs = [];
+    protected array $jobs = [];
 
     /**
-     * @var Helper
+     * @var Helper|null
      */
-    protected $helper;
+    protected ?Helper $helper = null;
 
-    /**
-     * @param array $config
-     */
     public function __construct(array $config = [])
     {
         $this->setConfig($this->getDefaultConfig());
@@ -40,10 +37,7 @@ class Jobby
         $this->script = realpath(__DIR__ . '/../bin/run-job');
     }
 
-    /**
-     * @return Helper
-     */
-    protected function getHelper()
+    protected function getHelper(): Helper
     {
         if ($this->helper === null) {
             $this->helper = new Helper();
@@ -52,10 +46,7 @@ class Jobby
         return $this->helper;
     }
 
-    /**
-     * @return array
-     */
-    public function getDefaultConfig()
+    public function getDefaultConfig(): array
     {
         return [
             'jobClass'       => 'Jobby\BackgroundJob',
@@ -87,26 +78,17 @@ class Jobby
         ];
     }
 
-    /**
-     * @param array
-     */
-    public function setConfig(array $config)
+    public function setConfig(array $config): void
     {
         $this->config = array_merge($this->config, $config);
     }
 
-    /**
-     * @return array
-     */
-    public function getConfig()
+    public function getConfig(): array
     {
         return $this->config;
     }
 
-    /**
-     * @return array
-     */
-    public function getJobs()
+    public function getJobs(): array
     {
         return $this->jobs;
     }
@@ -114,12 +96,9 @@ class Jobby
     /**
      * Add a job.
      *
-     * @param string $job
-     * @param array  $config
-     *
      * @throws Exception
      */
-    public function add($job, array $config)
+    public function add(string $job, array $config): void
     {
         if (empty($config['schedule'])) {
             throw new Exception("'schedule' is required for '$job' job");
@@ -150,9 +129,9 @@ class Jobby
     /**
      * Run all jobs.
      */
-    public function run()
+    public function run(): void
     {
-        $isUnix = ($this->helper->getPlatform() === Helper::UNIX);
+        $isUnix = ($this->getHelper()->getPlatform() === Helper::UNIX);
 
         if ($isUnix && !extension_loaded('posix')) {
             throw new Exception('posix extension is required');
@@ -160,7 +139,7 @@ class Jobby
 
         $scheduleChecker = new ScheduleChecker(new DateTimeImmutable("now"));
         foreach ($this->jobs as $jobConfig) {
-            list($job, $config) = $jobConfig;
+            [$job, $config] = $jobConfig;
             if (!$scheduleChecker->isDue($config['schedule'])) {
                 continue;
             }
@@ -172,11 +151,7 @@ class Jobby
         }
     }
 
-    /**
-     * @param string $job
-     * @param array  $config
-     */
-    protected function runUnix($job, array $config)
+    protected function runUnix(string $job, array $config): void
     {
         $command = $this->getExecutableCommand($job, $config);
         $binary = $this->getPhpBinary();
@@ -186,11 +161,7 @@ class Jobby
     }
 
     // @codeCoverageIgnoreStart
-    /**
-     * @param string $job
-     * @param array  $config
-     */
-    protected function runWindows($job, array $config)
+    protected function runWindows(string $job, array $config): void
     {
         // Run in background (non-blocking). From
         // http://us3.php.net/manual/en/function.exec.php#43834
@@ -201,13 +172,7 @@ class Jobby
     }
     // @codeCoverageIgnoreEnd
 
-    /**
-     * @param string $job
-     * @param array  $config
-     *
-     * @return string
-     */
-    protected function getExecutableCommand($job, array $config)
+    protected function getExecutableCommand(string $job, array $config): string
     {
         if (isset($config['closure'])) {
             $wrapper = new SerializableClosure($config['closure']);
@@ -222,10 +187,7 @@ class Jobby
         return sprintf('"%s" "%s" "%s"', $this->script, $job, http_build_query($config));
     }
 
-    /**
-     * @return false|string
-     */
-    protected function getPhpBinary()
+    protected function getPhpBinary(): string|false
     {
         $executableFinder = new PhpExecutableFinder();
 
